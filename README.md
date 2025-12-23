@@ -25,7 +25,7 @@ A Node.js/Next.js service that automates website logins, captures session cookie
    - Method: `POST`
    - URL: `https://your-render-app.onrender.com/api/start`
    - Body (JSON):
-   ```json
+   \`\`\`json
    {
      "targetUrl": "https://leetcode.com",
      "loginUrl": "https://leetcode.com/accounts/login",
@@ -33,7 +33,7 @@ A Node.js/Next.js service that automates website logins, captures session cookie
      "password": "your_password",
      "webhookUrl": "https://your-n8n.app.n8n.cloud/webhook/abc123"
    }
-   ```
+   \`\`\`
 
 ### Step 3: Use Cookies in n8n
 
@@ -44,7 +44,7 @@ In the webhook receiver workflow, access cookies:
 
 ### Complete n8n Workflow Example
 
-```
+\`\`\`
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │ Schedule Trigger│ ──▶ │ HTTP Request     │ ──▶ │ (Wait for       │
 │ (7:00 AM daily) │     │ POST /api/start  │     │  webhook)       │
@@ -55,13 +55,13 @@ In the webhook receiver workflow, access cookies:
 │ (receives       │     │  cookieString)   │     │ (use cookies)   │
 │  cookies)       │     │                  │     │                 │
 └─────────────────┘     └──────────────────┘     └─────────────────┘
-```
+\`\`\`
 
 ## API Usage
 
 ### POST /api/start
 
-```json
+\`\`\`json
 {
   "targetUrl": "https://leetcode.com",
   "loginUrl": "https://leetcode.com/accounts/login",
@@ -69,11 +69,11 @@ In the webhook receiver workflow, access cookies:
   "password": "your_password",
   "webhookUrl": "https://your-n8n.app.n8n.cloud/webhook/abc123"
 }
-```
+\`\`\`
 
 ### Response
 
-```json
+\`\`\`json
 {
   "status": "success",
   "message": "Captured 10 cookies and sent to webhook",
@@ -87,11 +87,11 @@ In the webhook receiver workflow, access cookies:
     }
   ]
 }
-```
+\`\`\`
 
 ### Webhook Payload (sent to n8n)
 
-```json
+\`\`\`json
 {
   "targetUrl": "https://leetcode.com",
   "loginUrl": "https://leetcode.com/accounts/login",
@@ -102,19 +102,19 @@ In the webhook receiver workflow, access cookies:
   "cookies": [...],
   "cookieString": "LEETCODE_SESSION=abc123; csrftoken=xyz789; ..."
 }
-```
+\`\`\`
 
 ## Deployment to Render
 
 ### Step 1: Push to GitHub
 
-```bash
+\`\`\`bash
 git init
 git add .
 git commit -m "Initial commit"
 git remote add origin https://github.com/YOUR_USERNAME/login-automation.git
 git push -u origin main
-```
+\`\`\`
 
 ### Step 2: Deploy on Render
 
