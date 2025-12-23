@@ -27,6 +27,8 @@ interface CookieData {
 }
 
 export async function POST(request: NextRequest) {
+  let browser: any = null
+
   try {
     const body: LoginRequest = await request.json()
     const { targetUrl, loginUrl, username, password, webhookUrl } = body
@@ -61,7 +63,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const browser = await chromium.launch({
+    browser = await chromium.launch({
       headless: true,
       args: [
         "--no-sandbox",
@@ -301,40 +303,60 @@ export async function POST(request: NextRequest) {
         console.log(`[v0] Login may have failed: ${errorText}`)
       }
 
-      // Extract cookies
-      console.log("[v0] Extracting ALL cookies using multiple methods...")
+      console.log("[v0] ========== COOKIE EXTRACTION START ==========")
 
-      // Method 1: Extract from browser context (most reliable)
+      // Method 1: Extract from browser context (MOST RELIABLE)
+      console.log("[v0] Method 1: Extracting cookies from browser context...")
       const contextCookies = await extractAllCookies(context)
       console.log(`[v0] Method 1 (Context): Extracted ${contextCookies.length} cookies`)
-
-      // Method 2: Extract via JavaScript
-      const jsCookies = await extractViaJavaScript(page)
-      console.log(`[v0] Method 2 (JavaScript): Extracted ${jsCookies.length} cookies`)
-
-      // Use the most comprehensive result
-      const allCookies = contextCookies.length >= jsCookies.length ? contextCookies : jsCookies
-
-      if (allCookies.length === 0) {
-        throw new Error("No cookies extracted from any method")
+      if (contextCookies.length > 0) {
+        console.log(
+          `[v0] Context cookies sample: ${contextCookies
+            .slice(0, 3)
+            .map((c) => c.name)
+            .join(", ")}`,
+        )
       }
 
-      // Identify critical cookies (session, auth, CSRF tokens)
+      // Method 2: Extract via JavaScript
+      console.log("[v0] Method 2: Extracting cookies via JavaScript...")
+      const jsCookies = await extractViaJavaScript(page)
+      console.log(`[v0] Method 2 (JavaScript): Extracted ${jsCookies.length} cookies`)
+      if (jsCookies.length > 0) {
+        console.log(
+          `[v0] JS cookies sample: ${jsCookies
+            .slice(0, 3)
+            .map((c) => c.name)
+            .join(", ")}`,
+        )
+      }
+
+      const allCookies = contextCookies.length >= jsCookies.length ? contextCookies : jsCookies
+      const extractionMethod = contextCookies.length >= jsCookies.length ? "context" : "javascript"
+
+      console.log(`[v0] Using ${extractionMethod} method (${allCookies.length} cookies)`)
+
+      if (allCookies.length === 0) {
+        console.error("[v0] CRITICAL: No cookies extracted from any method!")
+        throw new Error("No cookies extracted from any method. Login may have failed or cookies are blocked.")
+      }
+
       const criticalCookieNames = identifyCriticalCookies(allCookies)
-      console.log(`[v0] Identified ${criticalCookieNames.length} critical cookies`)
+      console.log(`[v0] Identified ${criticalCookieNames.length} critical cookies: ${criticalCookieNames.join(", ")}`)
 
-      // Extract session tokens (long-valued cookies)
       const sessionTokens = extractSessionTokens(allCookies)
-      console.log(`[v0] Found ${sessionTokens.length} session tokens`)
+      console.log(`[v0] Found ${sessionTokens.length} session tokens (length > 100 chars)`)
+      sessionTokens.forEach((token) => {
+        console.log(`[v0]   - ${token.name}: ${token.length} characters`)
+      })
 
-      // Build cookie strings
       const cookieString = buildCookieString(allCookies)
       const setCookieStrings = buildSetCookieString(allCookies)
 
       console.log(`[v0] Total cookies extracted: ${allCookies.length}`)
-      console.log(`[v0] Cookie string length: ${cookieString.length} characters`)
+      console.log(`[v0] Cookie string total length: ${cookieString.length} characters`)
+      console.log("[v0] ========== COOKIE EXTRACTION COMPLETE ==========")
 
-      // Prepare comprehensive webhook payload
       const webhookPayload = {
         targetUrl,
         loginUrl,
@@ -345,27 +367,35 @@ export async function POST(request: NextRequest) {
           criticalCookies: criticalCookieNames.length,
           sessionTokens: sessionTokens.length,
           cookieStringLength: cookieString.length,
+          extractionMethod: extractionMethod,
         },
         criticalCookieNames: criticalCookieNames,
         sessionTokens: sessionTokens.map((t) => ({
           name: t.name,
           length: t.length,
-          value: t.value, // Full value, no truncation
+          value: t.value, // FULL VALUE - NO TRUNCATION
         })),
-        cookies: allCookies,
+        cookies: allCookies, // ALL cookies with FULL values
         cookieString: cookieString,
         setCookieHeaders: setCookieStrings,
         extractionMethods: {
           contextCookies: contextCookies.length,
           jsCookies: jsCookies.length,
-          methodUsed: contextCookies.length >= jsCookies.length ? "context" : "javascript",
+          methodUsed: extractionMethod,
+        },
+        debugInfo: {
+          pageUrl: page.url(),
+          pageTitle: await page.title().catch(() => "Unknown"),
+          extractedAt: new Date().toISOString(),
         },
       }
 
       let webhookSuccess = false
-      for (let attempt = 1; attempt <= 2; attempt++) {
+      let webhookError = null
+
+      for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          console.log(`[v0] Sending ${allCookies.length} cookies to webhook (attempt ${attempt}): ${webhookUrl}`)
+          console.log(`[v0] Sending to webhook (attempt ${attempt}/${3}): ${webhookUrl}`)
           const webhookResponse = await fetch(webhookUrl, {
             method: "POST",
             headers: {
@@ -375,48 +405,72 @@ export async function POST(request: NextRequest) {
             body: JSON.stringify(webhookPayload),
           })
 
-          if (!webhookResponse.ok) {
-            console.warn(`[v0] Webhook responded with status: ${webhookResponse.status}`)
-          } else {
-            console.log(`[v0] Webhook success: ${webhookResponse.status}`)
+          console.log(`[v0] Webhook response: ${webhookResponse.status} ${webhookResponse.statusText}`)
+
+          if (webhookResponse.ok) {
+            console.log("[v0] Webhook sent successfully!")
             webhookSuccess = true
             break
+          } else {
+            const errorText = await webhookResponse.text().catch(() => "")
+            console.warn(`[v0] Webhook failed with status ${webhookResponse.status}: ${errorText}`)
+            webhookError = `HTTP ${webhookResponse.status}: ${errorText.substring(0, 100)}`
           }
-        } catch (webhookError) {
-          console.error(`[v0] Webhook error (attempt ${attempt}):`, webhookError)
-          if (attempt < 2) {
-            await new Promise((resolve) => setTimeout(resolve, 1000))
+        } catch (webhookErr) {
+          console.error(`[v0] Webhook error (attempt ${attempt}):`, webhookErr)
+          webhookError = webhookErr instanceof Error ? webhookErr.message : String(webhookErr)
+
+          if (attempt < 3) {
+            console.log("[v0] Retrying webhook in 2 seconds...")
+            await new Promise((resolve) => setTimeout(resolve, 2000))
           }
         }
       }
 
       await browser.close()
+      browser = null
 
-      // Return comprehensive extraction result
       return NextResponse.json({
         status: "success",
-        message: `Extracted ${allCookies.length} cookies (${criticalCookieNames.length} critical, ${sessionTokens.length} session tokens)${webhookSuccess ? " and sent to webhook" : " (webhook failed)"}`,
+        message: `Successfully extracted ${allCookies.length} cookies (${criticalCookieNames.length} critical, ${sessionTokens.length} session tokens)${webhookSuccess ? " and sent to webhook" : ""}`,
         webhookSent: webhookSuccess,
+        webhookError: webhookSuccess ? undefined : webhookError,
         extraction: {
           totalCookies: allCookies.length,
           criticalCookies: criticalCookieNames.length,
           sessionTokens: sessionTokens.length,
           cookieStringLength: cookieString.length,
+          extractionMethod: extractionMethod,
         },
         criticalCookieNames: criticalCookieNames,
         sessionTokens: sessionTokens.map((t) => ({
           name: t.name,
           length: t.length,
-          preview: t.value.substring(0, 50) + "...",
+          preview: t.value.substring(0, 50) + (t.value.length > 50 ? "..." : ""),
+          fullLength: t.value.length,
         })),
         cookies: allCookies,
         cookieString: cookieString,
+        extractionMethods: {
+          context: contextCookies.length,
+          javascript: jsCookies.length,
+          used: extractionMethod,
+        },
       })
     } catch (error) {
-      await browser.close()
+      if (browser) {
+        await browser.close().catch(() => {})
+        browser = null
+      }
       throw error
     }
   } catch (error) {
+    if (browser) {
+      await browser.close().catch((err) => {
+        console.error("[v0] Browser cleanup error:", err)
+      })
+    }
+
     console.error("Automation error:", error)
     const errorMessage = error instanceof Error ? error.message : "Automation failed"
     const errorDetails = error instanceof Error && error.cause ? ` Cause: ${String(error.cause)}` : ""
@@ -424,6 +478,7 @@ export async function POST(request: NextRequest) {
       {
         status: "error",
         message: errorMessage + errorDetails,
+        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )
