@@ -25,38 +25,32 @@ interface ExtractionResult {
   extractedAt?: string
 }
 
-// Critical cookie patterns for ALL websites
 const CRITICAL_PATTERNS = [
-  // Session cookies
   /session/i,
   /sid/i,
   /sessionid/i,
   /jsessionid/i,
   /phpsessid/i,
   /asp\.net_sessionid/i,
-
-  // Authentication
   /auth/i,
   /token/i,
   /jwt/i,
   /access_token/i,
   /refresh_token/i,
   /user_token/i,
-
-  // CSRF Protection
   /csrf/i,
   /xsrf/i,
   /crumb/i,
   /_token/i,
-
-  // Platform-specific
-  /connect\.sid/i, // Express.js
-  /laravel_session/i, // Laravel
-  /SERVERID/i, // Load balancing
-  /AWSALB/i, // AWS
-  /cf_clearance/i, // Cloudflare
-  /__Secure/i, // Secure cookies
-  /__Host/i, // Host-only cookies
+  /connect\.sid/i,
+  /laravel_session/i,
+  /SERVERID/i,
+  /AWSALB/i,
+  /cf_clearance/i,
+  /__Secure/i,
+  /__Host/i,
+  /LEETCODE_SESSION/i,
+  /INGRESSCOOKIE/i,
 ]
 
 /**
