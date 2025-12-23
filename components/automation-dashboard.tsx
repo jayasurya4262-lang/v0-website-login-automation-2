@@ -42,6 +42,7 @@ export function AutomationDashboard() {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
   const [copiedAll, setCopiedAll] = useState(false)
   const [showAllCookies, setShowAllCookies] = useState(true)
+  const [copiedString, setCopiedString] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -81,17 +82,25 @@ export function AutomationDashboard() {
     }
   }
 
+  const copyCookieString = () => {
+    if (result?.cookieString) {
+      navigator.clipboard.writeText(result.cookieString)
+      setCopiedString(true)
+      setTimeout(() => setCopiedString(false), 2000)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background p-6 md:p-12">
       <div className="mx-auto max-w-4xl space-y-8">
         <div className="space-y-2 text-center">
           <div className="flex items-center justify-center gap-2">
             <Cookie className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold tracking-tight">Login Automation</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Login Automation & Cookie Extractor</h1>
           </div>
-          <p className="text-muted-foreground">
-            Automate website logins, capture ALL session cookies (including CSRF tokens), and forward them to your n8n
-            webhook
+          <p className="text-balance text-muted-foreground">
+            Automate website logins and extract <span className="font-semibold text-primary">ALL cookies</span>{" "}
+            (session, CSRF, auth tokens) - No limits, complete extraction
           </p>
         </div>
 
@@ -113,7 +122,7 @@ export function AutomationDashboard() {
                   </Label>
                   <Input
                     id="targetUrl"
-                    placeholder="https://example.com"
+                    placeholder="https://leetcode.com"
                     value={formData.targetUrl}
                     onChange={(e) => setFormData({ ...formData, targetUrl: e.target.value })}
                     required
@@ -127,7 +136,7 @@ export function AutomationDashboard() {
                   </Label>
                   <Input
                     id="loginUrl"
-                    placeholder="https://example.com/login"
+                    placeholder="https://leetcode.com/accounts/login/"
                     value={formData.loginUrl}
                     onChange={(e) => setFormData({ ...formData, loginUrl: e.target.value })}
                     required
@@ -137,11 +146,11 @@ export function AutomationDashboard() {
                 <div className="space-y-2">
                   <Label htmlFor="username" className="flex items-center gap-2">
                     <User className="h-4 w-4" />
-                    Username
+                    Username / Email
                   </Label>
                   <Input
                     id="username"
-                    placeholder="your_username"
+                    placeholder="your_username or email"
                     value={formData.username}
                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                     required
@@ -178,7 +187,7 @@ export function AutomationDashboard() {
                   {loading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Automating Login...
+                      Extracting ALL Cookies...
                     </>
                   ) : (
                     <>
@@ -195,32 +204,46 @@ export function AutomationDashboard() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Cookie className="h-5 w-5" />
-                Results
+                Cookie Extraction Results
               </CardTitle>
-              <CardDescription>Complete cookie extraction - ALL cookies captured without limits</CardDescription>
+              <CardDescription>
+                Complete extraction - ALL cookies captured (session, CSRF, auth, tracking, etc.)
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {!result && !loading && (
-                <div className="flex h-64 items-center justify-center text-muted-foreground">
-                  <p>Run automation to see results</p>
+                <div className="flex h-64 items-center justify-center text-center text-muted-foreground">
+                  <div className="space-y-2">
+                    <Cookie className="mx-auto h-12 w-12 opacity-20" />
+                    <p>Run automation to extract cookies</p>
+                    <p className="text-xs">Captures session tokens, CSRF, and all authentication data</p>
+                  </div>
                 </div>
               )}
 
               {loading && (
                 <div className="flex h-64 flex-col items-center justify-center gap-4">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <p className="text-muted-foreground">Logging in and extracting ALL cookies...</p>
+                  <div className="text-center">
+                    <p className="font-medium text-muted-foreground">Logging in and extracting cookies...</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Capturing ALL cookies without limits</p>
+                  </div>
                 </div>
               )}
 
               {result && (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">Status:</span>
                     <Badge variant={result.status === "success" ? "default" : "destructive"}>{result.status}</Badge>
+                    {result.cookies && (
+                      <Badge variant="secondary" className="font-semibold">
+                        {result.cookies.length} Cookies Extracted
+                      </Badge>
+                    )}
                     {result.webhookSent !== undefined && (
                       <Badge variant={result.webhookSent ? "default" : "secondary"}>
-                        {result.webhookSent ? "Webhook Sent" : "Webhook Failed"}
+                        {result.webhookSent ? "Webhook Sent ✓" : "Webhook Failed"}
                       </Badge>
                     )}
                   </div>
@@ -228,22 +251,23 @@ export function AutomationDashboard() {
                   {result.message && <p className="text-sm text-muted-foreground">{result.message}</p>}
 
                   {result.importantCookies && result.importantCookies.length > 0 && (
-                    <div className="space-y-2 rounded-lg border-2 border-primary/20 bg-primary/5 p-3">
+                    <div className="space-y-2 rounded-lg border-2 border-primary/30 bg-primary/10 p-4">
                       <div className="flex items-center gap-2">
-                        <Lock className="h-4 w-4 text-primary" />
-                        <p className="font-semibold text-primary">
+                        <Lock className="h-5 w-5 text-primary" />
+                        <p className="text-base font-bold text-primary">
                           Critical Cookies Found ({result.importantCookies.length}):
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         {result.importantCookies.map((name, i) => (
-                          <Badge key={i} variant="default" className="text-xs font-medium">
+                          <Badge key={i} variant="default" className="font-mono text-xs font-semibold">
                             {name}
                           </Badge>
                         ))}
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        These include session cookies, CSRF tokens, and authentication data
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Includes session cookies (can be very long), CSRF tokens, authentication data, and security
+                        tokens
                       </p>
                     </div>
                   )}
@@ -252,8 +276,10 @@ export function AutomationDashboard() {
                     <div className="space-y-3">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <p className="font-semibold">Complete Cookie Extraction ({result.cookies.length} total)</p>
-                          <p className="text-xs text-muted-foreground">Every cookie captured - no limits applied</p>
+                          <p className="text-base font-bold">Complete Cookie Extraction</p>
+                          <p className="text-xs text-muted-foreground">
+                            {result.cookies.length} total cookies - No arbitrary limits applied
+                          </p>
                         </div>
                         <div className="flex gap-2">
                           <Button
@@ -261,7 +287,9 @@ export function AutomationDashboard() {
                             variant={showAllCookies ? "default" : "outline"}
                             onClick={() => setShowAllCookies(!showAllCookies)}
                           >
-                            {showAllCookies ? "All Cookies" : "Important Only"}
+                            {showAllCookies
+                              ? `All (${result.cookies.length})`
+                              : `Critical (${result.importantCookies?.length || 0})`}
                           </Button>
                           <Button size="sm" variant="outline" onClick={copyAllCookies}>
                             {copiedAll ? (
@@ -276,7 +304,7 @@ export function AutomationDashboard() {
                           </Button>
                         </div>
                       </div>
-                      <div className="max-h-96 space-y-2 overflow-auto rounded-lg border p-2">
+                      <div className="max-h-96 space-y-2 overflow-auto rounded-lg border bg-muted/30 p-3">
                         {result.cookies
                           .filter((cookie) => {
                             if (showAllCookies) return true
@@ -284,34 +312,49 @@ export function AutomationDashboard() {
                           })
                           .map((cookie, index) => {
                             const isImportant = result.importantCookies?.includes(cookie.name)
+                            const isVeryLong = cookie.value.length > 100
                             return (
                               <div
                                 key={index}
-                                className={`rounded-lg border p-3 text-sm ${
-                                  isImportant ? "border-primary/30 bg-primary/5" : "bg-muted/50"
+                                className={`rounded-lg border p-3 text-sm transition-colors ${
+                                  isImportant ? "border-primary/40 bg-primary/5" : "bg-background"
                                 }`}
                               >
                                 <div className="flex items-start justify-between gap-2">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <p className="font-medium">{cookie.name}</p>
+                                  <div className="min-w-0 flex-1 space-y-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="font-mono text-base font-bold">{cookie.name}</p>
                                       {isImportant && (
-                                        <Badge variant="default" className="text-xs">
-                                          Critical
+                                        <Badge variant="default" className="text-xs font-semibold">
+                                          CRITICAL
+                                        </Badge>
+                                      )}
+                                      {isVeryLong && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          {cookie.value.length} chars
                                         </Badge>
                                       )}
                                     </div>
-                                    <div className="mt-1 space-y-1">
-                                      <p className="break-all rounded bg-background p-2 font-mono text-xs leading-relaxed">
+                                    <div className="space-y-1">
+                                      <p className="break-all rounded-md border bg-muted p-2 font-mono text-xs leading-relaxed">
                                         {cookie.value}
                                       </p>
-                                      <p className="text-xs text-muted-foreground">
-                                        Length: {cookie.value.length} characters
-                                      </p>
+                                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                        <span className="font-medium">Length: {cookie.value.length}</span>
+                                        {isVeryLong && (
+                                          <Badge variant="outline" className="text-xs">
+                                            Session Token
+                                          </Badge>
+                                        )}
+                                      </div>
                                     </div>
-                                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                      <span className="font-medium">{cookie.domain}</span>
-                                      {cookie.path && <span>Path: {cookie.path}</span>}
+                                    <div className="flex flex-wrap gap-2 text-xs">
+                                      <span className="rounded bg-muted px-2 py-0.5 font-mono font-medium">
+                                        {cookie.domain}
+                                      </span>
+                                      {cookie.path && (
+                                        <span className="text-muted-foreground">Path: {cookie.path}</span>
+                                      )}
                                       {cookie.httpOnly && (
                                         <Badge variant="outline" className="text-xs">
                                           HttpOnly
@@ -323,7 +366,9 @@ export function AutomationDashboard() {
                                         </Badge>
                                       )}
                                       {cookie.expires && (
-                                        <span>Expires: {new Date(cookie.expires * 1000).toLocaleDateString()}</span>
+                                        <span className="text-muted-foreground">
+                                          Expires: {new Date(cookie.expires * 1000).toLocaleDateString()}
+                                        </span>
                                       )}
                                     </div>
                                   </div>
@@ -332,6 +377,7 @@ export function AutomationDashboard() {
                                     variant="ghost"
                                     className="h-8 w-8 shrink-0"
                                     onClick={() => copyCookie(cookie, index)}
+                                    title={`Copy ${cookie.name}=${cookie.value}`}
                                   >
                                     {copiedIndex === index ? (
                                       <Check className="h-4 w-4 text-green-500" />
@@ -344,10 +390,10 @@ export function AutomationDashboard() {
                             )
                           })}
                       </div>
-                      {!showAllCookies && (
+                      {!showAllCookies && result.cookies.length > (result.importantCookies?.length || 0) && (
                         <p className="text-center text-xs text-muted-foreground">
                           Showing {result.importantCookies?.length || 0} critical cookies of {result.cookies.length}{" "}
-                          total
+                          total - Click "All" to view everything
                         </p>
                       )}
                     </div>
@@ -355,13 +401,27 @@ export function AutomationDashboard() {
 
                   {result.cookieString && (
                     <div className="space-y-2">
-                      <p className="text-sm font-medium">Cookie String (for HTTP headers):</p>
-                      <div className="relative space-y-1">
-                        <pre className="max-h-32 overflow-auto rounded-lg border bg-muted p-3 text-xs leading-relaxed">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold">Cookie String (for HTTP headers):</p>
+                        <Button size="sm" variant="outline" onClick={copyCookieString}>
+                          {copiedString ? (
+                            <>
+                              <Check className="mr-1 h-3 w-3 text-green-500" /> Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="mr-1 h-3 w-3" /> Copy String
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <div className="space-y-1">
+                        <pre className="max-h-32 overflow-auto rounded-lg border bg-muted p-3 font-mono text-xs leading-relaxed">
                           {result.cookieString}
                         </pre>
                         <p className="text-xs text-muted-foreground">
-                          Total length: {result.cookieString.length} characters
+                          Total length: <span className="font-semibold">{result.cookieString.length}</span> characters -
+                          Ready for HTTP Cookie header
                         </p>
                       </div>
                     </div>
@@ -375,25 +435,26 @@ export function AutomationDashboard() {
         <Card>
           <CardHeader>
             <CardTitle>How It Works</CardTitle>
+            <CardDescription>Complete automated login with comprehensive cookie extraction</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-4">
               {[
-                { step: 1, title: "Submit", desc: "Enter website credentials and webhook URL" },
-                { step: 2, title: "Login", desc: "Playwright automates the login process" },
+                { step: 1, title: "Configure", desc: "Enter website URL, login credentials, and n8n webhook endpoint" },
+                { step: 2, title: "Automate", desc: "Playwright browser automates the complete login process" },
                 {
                   step: 3,
-                  title: "Extract",
-                  desc: "ALL cookies extracted (session, CSRF, auth, etc.)",
+                  title: "Extract ALL",
+                  desc: "Every single cookie captured (session, CSRF, auth, tracking, etc.)",
                 },
-                { step: 4, title: "Forward", desc: "Complete cookie data sent to your webhook" },
+                { step: 4, title: "Forward", desc: "Complete cookie data sent to your n8n webhook instantly" },
               ].map((item) => (
                 <div key={item.step} className="text-center">
-                  <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-lg font-bold text-primary-foreground">
                     {item.step}
                   </div>
-                  <p className="font-medium">{item.title}</p>
-                  <p className="text-sm text-muted-foreground">{item.desc}</p>
+                  <p className="font-semibold">{item.title}</p>
+                  <p className="text-pretty text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
                 </div>
               ))}
             </div>
