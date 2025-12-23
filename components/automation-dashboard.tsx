@@ -99,8 +99,8 @@ export function AutomationDashboard() {
             <h1 className="text-3xl font-bold tracking-tight">Login Automation & Cookie Extractor</h1>
           </div>
           <p className="text-balance text-muted-foreground">
-            Automate website logins and extract <span className="font-semibold text-primary">ALL cookies</span>{" "}
-            (session, CSRF, auth tokens) - No limits, complete extraction
+            Automate website logins and extract <span className="font-bold text-primary">EVERY SINGLE COOKIE</span> -
+            Session tokens (900+ chars), CSRF, auth, tracking - Complete extraction with zero limits
           </p>
         </div>
 
@@ -207,7 +207,8 @@ export function AutomationDashboard() {
                 Cookie Extraction Results
               </CardTitle>
               <CardDescription>
-                Complete extraction - ALL cookies captured (session, CSRF, auth, tracking, etc.)
+                100% Complete Extraction - ALL cookies captured including very long session tokens, CSRF, auth, and
+                tracking cookies
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -215,8 +216,10 @@ export function AutomationDashboard() {
                 <div className="flex h-64 items-center justify-center text-center text-muted-foreground">
                   <div className="space-y-2">
                     <Cookie className="mx-auto h-12 w-12 opacity-20" />
-                    <p>Run automation to extract cookies</p>
-                    <p className="text-xs">Captures session tokens, CSRF, and all authentication data</p>
+                    <p className="font-medium">Run automation to extract all cookies</p>
+                    <p className="text-xs">
+                      Captures session tokens (including 900+ character tokens), CSRF, and all authentication data
+                    </p>
                   </div>
                 </div>
               )}
@@ -226,7 +229,9 @@ export function AutomationDashboard() {
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                   <div className="text-center">
                     <p className="font-medium text-muted-foreground">Logging in and extracting cookies...</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Capturing ALL cookies without limits</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Capturing ALL cookies with complete values - No truncation or limits
+                    </p>
                   </div>
                 </div>
               )}
@@ -255,7 +260,7 @@ export function AutomationDashboard() {
                       <div className="flex items-center gap-2">
                         <Lock className="h-5 w-5 text-primary" />
                         <p className="text-base font-bold text-primary">
-                          Critical Cookies Found ({result.importantCookies.length}):
+                          🔒 Critical Cookies Extracted ({result.importantCookies.length}):
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
@@ -266,8 +271,8 @@ export function AutomationDashboard() {
                         ))}
                       </div>
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Includes session cookies (can be very long), CSRF tokens, authentication data, and security
-                        tokens
+                        Session cookies with full values (can be 900+ characters), CSRF tokens, authentication data -
+                        All extracted completely
                       </p>
                     </div>
                   )}
@@ -276,9 +281,10 @@ export function AutomationDashboard() {
                     <div className="space-y-3">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <p className="text-base font-bold">Complete Cookie Extraction</p>
+                          <p className="text-base font-bold">✅ Complete Cookie Extraction</p>
                           <p className="text-xs text-muted-foreground">
-                            {result.cookies.length} total cookies - No arbitrary limits applied
+                            {result.cookies.length} total cookies extracted - Every cookie with full value (no character
+                            limits)
                           </p>
                         </div>
                         <div className="flex gap-2">
@@ -326,12 +332,12 @@ export function AutomationDashboard() {
                                       <p className="font-mono text-base font-bold">{cookie.name}</p>
                                       {isImportant && (
                                         <Badge variant="default" className="text-xs font-semibold">
-                                          CRITICAL
+                                          🔥 CRITICAL
                                         </Badge>
                                       )}
                                       {isVeryLong && (
-                                        <Badge variant="secondary" className="text-xs">
-                                          {cookie.value.length} chars
+                                        <Badge variant="secondary" className="text-xs font-semibold">
+                                          📏 {cookie.value.length} characters
                                         </Badge>
                                       )}
                                     </div>
@@ -340,10 +346,10 @@ export function AutomationDashboard() {
                                         {cookie.value}
                                       </p>
                                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                        <span className="font-medium">Length: {cookie.value.length}</span>
+                                        <span className="font-semibold">Full Length: {cookie.value.length} chars</span>
                                         {isVeryLong && (
                                           <Badge variant="outline" className="text-xs">
-                                            Session Token
+                                            ✓ Complete Session Token
                                           </Badge>
                                         )}
                                       </div>
@@ -393,7 +399,7 @@ export function AutomationDashboard() {
                       {!showAllCookies && result.cookies.length > (result.importantCookies?.length || 0) && (
                         <p className="text-center text-xs text-muted-foreground">
                           Showing {result.importantCookies?.length || 0} critical cookies of {result.cookies.length}{" "}
-                          total - Click "All" to view everything
+                          total - Click "All" to view complete extraction
                         </p>
                       )}
                     </div>
@@ -402,7 +408,7 @@ export function AutomationDashboard() {
                   {result.cookieString && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold">Cookie String (for HTTP headers):</p>
+                        <p className="text-sm font-semibold">Full Cookie String (HTTP Cookie Header Format):</p>
                         <Button size="sm" variant="outline" onClick={copyCookieString}>
                           {copiedString ? (
                             <>
@@ -420,8 +426,8 @@ export function AutomationDashboard() {
                           {result.cookieString}
                         </pre>
                         <p className="text-xs text-muted-foreground">
-                          Total length: <span className="font-semibold">{result.cookieString.length}</span> characters -
-                          Ready for HTTP Cookie header
+                          Total length: <span className="font-bold text-primary">{result.cookieString.length}</span>{" "}
+                          characters - Complete cookie string ready for HTTP Cookie header (all values included)
                         </p>
                       </div>
                     </div>
