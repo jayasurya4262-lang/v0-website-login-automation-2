@@ -293,36 +293,33 @@ export async function POST(request: NextRequest) {
       }
 
       try {
+        console.log(`[v0] Clicking submit button and waiting for navigation...`)
         await Promise.all([
-          page.waitForNavigation({ waitUntil: "load", timeout: 20000 }).catch(() => {
-            console.log("[v0] post-click navigation timeout, checking current URL")
-          }),
+          page
+            .waitForNavigation({
+              waitUntil: "networkidle",
+              timeout: 60000,
+            })
+            .catch((err) => {
+              console.log(`[v0] Navigation/Networkidle timeout: ${err.message}. Checking current state...`)
+            }),
           submitButton.click({ timeout: 5000 }),
         ])
-        console.log(`[v0] Clicked submit button`)
-      } catch {
-        // Fallback: try keyboard submit
-        console.log(`[v0] Click failed, trying Enter key`)
+        console.log(`[v0] Clicked submit button and processed navigation`)
+      } catch (clickErr) {
+        // Fallback: try keyboard submit if click fails
+        console.log(
+          `[v0] Click failed, trying Enter key: ${clickErr instanceof Error ? clickErr.message : String(clickErr)}`,
+        )
         await passwordField.press("Enter")
-        await page.waitForNavigation({ waitUntil: "load", timeout: 20000 }).catch(() => {})
+        await page.waitForNavigation({ waitUntil: "networkidle", timeout: 30000 }).catch(() => {})
       }
 
+      console.log(`[v0] Waiting for login redirect to complete...`)
       await page.waitForTimeout(5000)
 
-      // Check if login was successful by looking for common error indicators
-      const errorIndicators = await page.$("text=/incorrect|invalid|wrong|error|failed/i")
-      if (errorIndicators) {
-        const errorText = await errorIndicators.textContent()
-        console.log(`[v0] Login may have failed: ${errorText}`)
-      }
-
-      console.log(`[v0] Waiting for post-login dashboard or state...`)
-      try {
-        await page.waitForLoadState("domcontentloaded", { timeout: 15000 })
-      } catch (e) {
-        console.log("[v0] post-login load state timeout")
-      }
-      await page.waitForTimeout(3000)
+      const currentUrl = page.url()
+      console.log(`[v0] Current URL after login redirect: ${currentUrl}`)
 
       if (targetUrl !== loginUrl) {
         console.log(`[v0] Navigating to target ${targetUrl} to ensure session propagation...`)
