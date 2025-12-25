@@ -303,6 +303,15 @@ export async function POST(request: NextRequest) {
         console.log(`[v0] Login may have failed: ${errorText}`)
       }
 
+      console.log(`[v0] Waiting for post-login dashboard or state...`)
+      await page.waitForLoadState("networkidle")
+      await page.waitForTimeout(5000)
+
+      if (targetUrl !== loginUrl) {
+        console.log(`[v0] Navigating to target ${targetUrl} to ensure session propagation...`)
+        await page.goto(targetUrl, { waitUntil: "networkidle", timeout: 45000 })
+      }
+
       console.log("[v0] ========== COOKIE EXTRACTION START ==========")
 
       // Method 1: Extract from browser context (MOST RELIABLE)

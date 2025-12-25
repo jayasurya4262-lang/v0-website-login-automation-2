@@ -51,6 +51,10 @@ const CRITICAL_PATTERNS = [
   /__Host/i,
   /LEETCODE_SESSION/i,
   /INGRESSCOOKIE/i,
+  /csrf_token/i,
+  /xsrf-token/i,
+  /session_id/i,
+  /auth_token/i,
 ]
 
 /**
