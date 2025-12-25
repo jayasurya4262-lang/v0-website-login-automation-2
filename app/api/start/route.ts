@@ -110,9 +110,16 @@ export async function POST(request: NextRequest) {
         try {
           console.log(`[v0] Attempt ${attempt}: Navigating to ${loginUrl}`)
           await page.goto(loginUrl, {
-            waitUntil: "networkidle",
-            timeout: 60000,
+            waitUntil: "domcontentloaded", // Faster than networkidle
+            timeout: 30000,
           })
+
+          try {
+            await page.waitForLoadState("networkidle", { timeout: 10000 })
+          } catch (e) {
+            console.log("[v0] networkidle timed out, proceeding anyway")
+          }
+
           navigationSuccess = true
           console.log(`[v0] Successfully loaded ${loginUrl}`)
           break
@@ -127,12 +134,16 @@ export async function POST(request: NextRequest) {
 
       if (!navigationSuccess) {
         throw new Error(
-          `Failed to load login page after 3 attempts: ${lastError?.message || "Unknown error"}. This may be due to the target website blocking automated access or network restrictions.`,
+          `Failed to load login page after 3 attempts: ${lastError?.message || "Unknown error"}. This may be due to slow network, blocking, or the 30s timeout limit.`,
         )
       }
 
-      await page.waitForLoadState("networkidle")
-      await page.waitForTimeout(5000)
+      try {
+        await page.waitForLoadState("load", { timeout: 15000 })
+      } catch (e) {
+        console.log("[v0] Initial load state wait timed out, continuing")
+      }
+      await page.waitForTimeout(3000)
 
       const usernameSelectors = [
         // LeetCode specific
@@ -189,7 +200,7 @@ export async function POST(request: NextRequest) {
       let usernameField = null
       for (const selector of usernameSelectors) {
         try {
-          usernameField = await page.waitForSelector(selector, { timeout: 3000, state: "visible" })
+          usernameField = await page.waitForSelector(selector, { timeout: 2000, state: "visible" })
           if (usernameField) {
             console.log(`[v0] Found username field with selector: ${selector}`)
             break
@@ -227,7 +238,7 @@ export async function POST(request: NextRequest) {
       let passwordField = null
       for (const selector of passwordSelectors) {
         try {
-          passwordField = await page.waitForSelector(selector, { timeout: 3000, state: "visible" })
+          passwordField = await page.waitForSelector(selector, { timeout: 2000, state: "visible" })
           if (passwordField) {
             console.log(`[v0] Found password field with selector: ${selector}`)
             break
@@ -253,7 +264,7 @@ export async function POST(request: NextRequest) {
       let submitButton = null
       for (const selector of submitSelectors) {
         try {
-          submitButton = await page.waitForSelector(selector, { timeout: 3000, state: "visible" })
+          submitButton = await page.waitForSelector(selector, { timeout: 2000, state: "visible" })
           if (submitButton) {
             console.log(`[v0] Found submit button with selector: ${selector}`)
             break
@@ -283,7 +294,9 @@ export async function POST(request: NextRequest) {
 
       try {
         await Promise.all([
-          page.waitForNavigation({ waitUntil: "networkidle", timeout: 30000 }).catch(() => {}),
+          page.waitForNavigation({ waitUntil: "load", timeout: 20000 }).catch(() => {
+            console.log("[v0] post-click navigation timeout, checking current URL")
+          }),
           submitButton.click({ timeout: 5000 }),
         ])
         console.log(`[v0] Clicked submit button`)
@@ -291,7 +304,7 @@ export async function POST(request: NextRequest) {
         // Fallback: try keyboard submit
         console.log(`[v0] Click failed, trying Enter key`)
         await passwordField.press("Enter")
-        await page.waitForNavigation({ waitUntil: "networkidle", timeout: 30000 }).catch(() => {})
+        await page.waitForNavigation({ waitUntil: "load", timeout: 20000 }).catch(() => {})
       }
 
       await page.waitForTimeout(5000)
@@ -304,12 +317,21 @@ export async function POST(request: NextRequest) {
       }
 
       console.log(`[v0] Waiting for post-login dashboard or state...`)
-      await page.waitForLoadState("networkidle")
-      await page.waitForTimeout(5000)
+      try {
+        await page.waitForLoadState("domcontentloaded", { timeout: 15000 })
+      } catch (e) {
+        console.log("[v0] post-login load state timeout")
+      }
+      await page.waitForTimeout(3000)
 
       if (targetUrl !== loginUrl) {
         console.log(`[v0] Navigating to target ${targetUrl} to ensure session propagation...`)
-        await page.goto(targetUrl, { waitUntil: "networkidle", timeout: 45000 })
+        try {
+          await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 20000 })
+          await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {})
+        } catch (e) {
+          console.log("[v0] Target URL navigation timeout, proceeding with extraction")
+        }
       }
 
       console.log("[v0] ========== COOKIE EXTRACTION START ==========")
