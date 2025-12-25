@@ -231,8 +231,9 @@ export async function POST(request: NextRequest) {
       await usernameField.click()
       await page.waitForTimeout(300)
       await usernameField.fill("")
-      await usernameField.type(username, { delay: 80 })
+      await usernameField.type(username, { delay: 120 })
       console.log(`[v0] Filled username field`)
+      await page.waitForTimeout(500)
 
       // Find and fill password field
       let passwordField = null
@@ -255,10 +256,30 @@ export async function POST(request: NextRequest) {
       await passwordField.click()
       await page.waitForTimeout(300)
       await passwordField.fill("")
-      await passwordField.type(password, { delay: 80 })
+      await passwordField.type(password, { delay: 120 })
       console.log(`[v0] Filled password field`)
 
       await page.waitForTimeout(1000)
+
+      // Check for checkboxes/agreements
+      console.log("[v0] Checking for checkboxes/agreements...")
+      const checkboxes = await page.$$('input[type="checkbox"]')
+      for (const checkbox of checkboxes) {
+        try {
+          const isVisible = await checkbox.isVisible()
+          if (isVisible) {
+            await checkbox.click()
+            console.log("[v0] Checked a checkbox")
+            await page.waitForTimeout(300)
+          }
+        } catch (e) {}
+      }
+
+      // Check for CAPTCHA
+      const hasCaptcha = await page.$('iframe[src*="captcha"], iframe[title*="reCAPTCHA"], iframe[src*="hcaptcha"]')
+      if (hasCaptcha) {
+        throw new Error("CAPTCHA detected - automation cannot proceed through visual CAPTCHA verification")
+      }
 
       // Find submit button
       let submitButton = null
@@ -278,18 +299,22 @@ export async function POST(request: NextRequest) {
         throw new Error("Could not find submit button")
       }
 
-      try {
-        await page.waitForFunction(
-          (btn) => {
-            const element = btn as HTMLButtonElement
-            return !element.disabled && element.getAttribute("aria-disabled") !== "true"
-          },
-          submitButton,
-          { timeout: 10000 },
-        )
-        console.log(`[v0] Submit button is enabled`)
-      } catch {
-        console.log(`[v0] Button may be disabled, trying to click anyway`)
+      // Waiting for submit button to be truly enabled...
+      console.log("[v0] Waiting for submit button to be truly enabled...")
+      let buttonEnabled = false
+      for (let i = 0; i < 40; i++) {
+        // 20 seconds total
+        const isEnabled = await submitButton.evaluate((btn) => {
+          const element = btn as HTMLButtonElement
+          return !element.disabled && element.getAttribute("aria-disabled") !== "true"
+        })
+
+        if (isEnabled) {
+          buttonEnabled = true
+          console.log(`[v0] Button enabled after ${i * 0.5} seconds`)
+          break
+        }
+        await page.waitForTimeout(500)
       }
 
       try {
