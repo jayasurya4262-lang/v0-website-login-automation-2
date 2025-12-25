@@ -145,6 +145,111 @@ export async function POST(request: NextRequest) {
       }
       await page.waitForTimeout(3000)
 
+      console.log("[v0] Checking for Cloudflare/Turnstile challenges...")
+      const cfSelectors = [
+        'iframe[src*="cloudflare"]',
+        'iframe[title*="Cloudflare"]',
+        "#cf-turnstile",
+        "#cf-challenge",
+        ".cf-turnstile",
+      ]
+
+      for (const selector of cfSelectors) {
+        try {
+          const cfFrame = await page.$(selector)
+          if (cfFrame) {
+            console.log(`[v0] Potential Cloudflare challenge detected: ${selector}`)
+            // Attempt to find the checkbox inside the frame if it's an iframe
+            const frame = await cfFrame.contentFrame()
+            if (frame) {
+              const checkbox = await frame.$('input[type="checkbox"], #challenge-stage input')
+              if (checkbox) {
+                console.log("[v0] Clicking Cloudflare checkbox inside iframe...")
+                await checkbox.click()
+                await page.waitForTimeout(2000)
+              }
+            } else {
+              // Direct click if it's not an iframe element itself
+              await cfFrame.click().catch(() => {})
+            }
+          }
+        } catch (e) {
+          console.log(`[v0] Error checking selector ${selector}:`, e)
+        }
+      }
+
+      console.log("[v0] Checking for Cloudflare challenge...")
+      const cloudflareDetected = await page.evaluate(() => {
+        // Check for Cloudflare challenge indicators
+        const cfChallenge = document.querySelector('input[type="checkbox"][name="cf-turnstile-response"]')
+        const cfFrame = document.querySelector('iframe[src*="challenges.cloudflare.com"]')
+        const cfBody = document.body.textContent?.includes("Checking your browser")
+        const cfTitle = document.title.toLowerCase().includes("cloudflare")
+        return !!(cfChallenge || cfFrame || cfBody || cfTitle)
+      })
+
+      if (cloudflareDetected) {
+        console.log("[v0] Cloudflare challenge detected, attempting to handle...")
+
+        // Try to find and click Cloudflare checkbox
+        const cfCheckboxSelectors = [
+          'input[type="checkbox"][name="cf-turnstile-response"]',
+          'iframe[src*="challenges.cloudflare.com"]',
+          '#cf-stage input[type="checkbox"]',
+          '.cf-turnstile input[type="checkbox"]',
+        ]
+
+        let cfCheckboxClicked = false
+        for (const selector of cfCheckboxSelectors) {
+          try {
+            const element = await page.waitForSelector(selector, { timeout: 3000, state: "visible" })
+            if (element) {
+              console.log(`[v0] Found Cloudflare element: ${selector}`)
+
+              // If it's an iframe, click inside it
+              if (selector.includes("iframe")) {
+                const frame = page.frame({ url: /challenges\.cloudflare\.com/ })
+                if (frame) {
+                  const checkbox = await frame.$('input[type="checkbox"]')
+                  if (checkbox) {
+                    await checkbox.click()
+                    console.log("[v0] Clicked Cloudflare checkbox in iframe")
+                    cfCheckboxClicked = true
+                  }
+                }
+              } else {
+                await element.click()
+                console.log("[v0] Clicked Cloudflare checkbox")
+                cfCheckboxClicked = true
+              }
+              break
+            }
+          } catch (e) {
+            continue
+          }
+        }
+
+        if (cfCheckboxClicked) {
+          console.log("[v0] Waiting for Cloudflare challenge to resolve...")
+          // Wait for challenge to complete (up to 10 seconds)
+          for (let i = 0; i < 20; i++) {
+            await page.waitForTimeout(500)
+            const challengeResolved = await page.evaluate(() => {
+              const cfChallenge = document.querySelector('input[type="checkbox"][name="cf-turnstile-response"]')
+              const cfFrame = document.querySelector('iframe[src*="challenges.cloudflare.com"]')
+              return !cfChallenge && !cfFrame
+            })
+
+            if (challengeResolved) {
+              console.log(`[v0] Cloudflare challenge resolved after ${(i + 1) * 0.5} seconds`)
+              break
+            }
+          }
+        }
+
+        await page.waitForTimeout(2000) // Additional wait after resolution
+      }
+
       const usernameSelectors = [
         // LeetCode specific
         'input[data-cy="sign-in-email-input"]',
@@ -267,10 +372,18 @@ export async function POST(request: NextRequest) {
       for (const checkbox of checkboxes) {
         try {
           const isVisible = await checkbox.isVisible()
-          if (isVisible) {
-            await checkbox.click()
-            console.log("[v0] Checked a checkbox")
-            await page.waitForTimeout(300)
+          const isCfCheckbox = await checkbox.evaluate((el) => {
+            const element = el as HTMLInputElement
+            return element.name === "cf-turnstile-response" || element.closest(".cf-turnstile") !== null
+          })
+
+          if (isVisible && !isCfCheckbox) {
+            const isChecked = await checkbox.isChecked()
+            if (!isChecked) {
+              await checkbox.click()
+              console.log("[v0] Checked a checkbox")
+              await page.waitForTimeout(300)
+            }
           }
         } catch (e) {}
       }
@@ -440,6 +553,10 @@ export async function POST(request: NextRequest) {
           pageUrl: page.url(),
           pageTitle: await page.title().catch(() => "Unknown"),
           extractedAt: new Date().toISOString(),
+          securityChallenges: {
+            cloudflareDetected: cloudflareDetected,
+            captchaDetected: !!hasCaptcha,
+          },
         },
       }
 
@@ -488,6 +605,10 @@ export async function POST(request: NextRequest) {
         message: `Successfully extracted ${allCookies.length} cookies (${criticalCookieNames.length} critical, ${sessionTokens.length} session tokens)${webhookSuccess ? " and sent to webhook" : ""}`,
         webhookSent: webhookSuccess,
         webhookError: webhookSuccess ? undefined : webhookError,
+        securityChallenges: {
+          cloudflareDetected: cloudflareDetected,
+          captchaDetected: !!hasCaptcha,
+        },
         extraction: {
           totalCookies: allCookies.length,
           criticalCookies: criticalCookieNames.length,

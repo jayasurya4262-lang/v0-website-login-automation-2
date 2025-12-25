@@ -65,16 +65,22 @@ const CRITICAL_PATTERNS = [
 export async function extractAllCookies(context: BrowserContext): Promise<CookieResult[]> {
   try {
     const cookies = await context.cookies()
-    return cookies.map((cookie) => ({
-      name: cookie.name,
-      value: cookie.value, // FULL VALUE - NO TRUNCATION
-      domain: cookie.domain,
-      path: cookie.path,
-      expires: cookie.expires,
-      httpOnly: cookie.httpOnly,
-      secure: cookie.secure,
-      sameSite: cookie.sameSite,
-    }))
+    const uniqueCookies = new Map<string, CookieResult>()
+
+    cookies.forEach((cookie) => {
+      uniqueCookies.set(cookie.name, {
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain,
+        path: cookie.path,
+        expires: cookie.expires,
+        httpOnly: cookie.httpOnly,
+        secure: cookie.secure,
+        sameSite: cookie.sameSite,
+      })
+    })
+
+    return Array.from(uniqueCookies.values())
   } catch (error) {
     console.error("Cookie extraction error:", error)
     return []
@@ -86,16 +92,30 @@ export async function extractAllCookies(context: BrowserContext): Promise<Cookie
  * @param page - Playwright page
  * @returns Cookie string from Set-Cookie headers
  */
-export async function extractFromHeaders(page: Page): Promise<string[]> {
+export async function extractFromHeaders(page: Page): Promise<CookieResult[]> {
   try {
-    const cookies: string[] = []
+    const cookies: CookieResult[] = []
 
-    // Intercept all network responses
     page.on("response", (response) => {
       const setCookieHeaders = response.headers()["set-cookie"]
       if (setCookieHeaders) {
-        const headerArray = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders]
-        cookies.push(...headerArray)
+        const headerArray = setCookieHeaders.split("\n")
+        headerArray.forEach((header) => {
+          const parts = header.split(";")
+          const [nameValue] = parts
+          const [name, ...valueParts] = nameValue.split("=")
+
+          if (name && valueParts.length > 0) {
+            cookies.push({
+              name: name.trim(),
+              value: valueParts.join("=").trim(),
+              domain: new URL(response.url()).hostname,
+              path: "/",
+              httpOnly: header.toLowerCase().includes("httponly"),
+              secure: header.toLowerCase().includes("secure"),
+            })
+          }
+        })
       }
     })
 
@@ -113,25 +133,26 @@ export async function extractFromHeaders(page: Page): Promise<string[]> {
  */
 export async function extractViaJavaScript(page: Page): Promise<CookieResult[]> {
   try {
-    const cookieString = await page.evaluate(() => {
-      return document.cookie
-    })
+    const results = await page.evaluate(() => {
+      const cookieArr: any[] = []
+      const cookies = document.cookie.split(";")
 
-    // Parse cookie string
-    const cookies: CookieResult[] = cookieString
-      .split(";")
-      .filter((c) => c.trim())
-      .map((c) => {
+      cookies.forEach((c) => {
+        if (!c.trim()) return
         const [name, ...valueParts] = c.trim().split("=")
-        return {
-          name: name.trim(),
-          value: valueParts.join("=").trim(),
-          domain: window.location.hostname,
-          path: "/",
+        if (name) {
+          cookieArr.push({
+            name: name.trim(),
+            value: valueParts.join("=").trim(),
+            domain: window.location.hostname,
+            path: "/",
+          })
         }
       })
+      return cookieArr
+    })
 
-    return cookies
+    return results
   } catch (error) {
     console.error("JavaScript extraction error:", error)
     return []
@@ -359,19 +380,21 @@ export async function performCompleteExtraction(
     // Perform login
     await universalLogin(page, loginUrl, targetUrl, credentials)
 
-    // Extract cookies using multiple methods
+    const cookieMap = new Map<string, CookieResult>()
+
     console.log("[*] Extracting cookies - Method 1: Context cookies")
     const contextCookies = await extractAllCookies(context)
+    contextCookies.forEach((c) => cookieMap.set(c.name, c))
 
     console.log("[*] Extracting cookies - Method 2: JavaScript")
     const jsCookies = await extractViaJavaScript(page)
+    jsCookies.forEach((c) => {
+      if (!cookieMap.has(c.name)) {
+        cookieMap.set(c.name, c)
+      }
+    })
 
-    // Merge cookies (context method is most reliable)
-    const allCookies = contextCookies.length > 0 ? contextCookies : jsCookies
-
-    if (allCookies.length === 0) {
-      throw new Error("No cookies extracted from any method")
-    }
+    const allCookies = Array.from(cookieMap.values())
 
     // Identify critical cookies
     const criticalCookies = identifyCriticalCookies(allCookies)
