@@ -205,7 +205,8 @@ export async function POST(request: NextRequest) {
       }
 
       const usernameSelectors = [
-        // LeetCode specific
+        // LeetCode specific (updated based on logs)
+        'input[data-cy="username"]',
         'input[data-cy="sign-in-email-input"]',
         'input[name="login"]',
         "#id_login",
@@ -227,7 +228,8 @@ export async function POST(request: NextRequest) {
       ]
 
       const passwordSelectors = [
-        // LeetCode specific
+        // LeetCode specific (updated based on logs)
+        'input[data-cy="password"]',
         'input[data-cy="sign-in-password-input"]',
         "#id_password",
         // Generic selectors
@@ -259,9 +261,10 @@ export async function POST(request: NextRequest) {
       let usernameField = null
       for (const selector of usernameSelectors) {
         try {
-          usernameField = await page.waitForSelector(selector, { timeout: 2000, state: "visible" })
+          usernameField = await page.waitForSelector(selector, { timeout: 3000, state: "attached" })
           if (usernameField) {
-            console.log(`[v0] Found username field with selector: ${selector}`)
+            const isVisible = await usernameField.isVisible()
+            console.log(`[v0] Found username field with selector: ${selector} (visible: ${isVisible})`)
             break
           }
         } catch {
@@ -298,9 +301,10 @@ export async function POST(request: NextRequest) {
       let passwordField = null
       for (const selector of passwordSelectors) {
         try {
-          passwordField = await page.waitForSelector(selector, { timeout: 2000, state: "visible" })
+          passwordField = await page.waitForSelector(selector, { timeout: 3000, state: "attached" })
           if (passwordField) {
-            console.log(`[v0] Found password field with selector: ${selector}`)
+            const isVisible = await passwordField.isVisible()
+            console.log(`[v0] Found password field with selector: ${selector} (visible: ${isVisible})`)
             break
           }
         } catch {
