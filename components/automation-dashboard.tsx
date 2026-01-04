@@ -30,6 +30,8 @@ interface AutomationResult {
   securityChallenges?: {
     cloudflareDetected: boolean
     captchaDetected: boolean
+    turnstileMethod?: string
+    turnstilesolved?: boolean
   }
 }
 
@@ -349,10 +351,48 @@ export function AutomationDashboard() {
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/20 text-amber-500 animate-pulse">
                         <ShieldCheck className="h-4 w-4" />
                       </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-amber-500">Cloudflare Turnstile Challenge</p>
+                          {result.securityChallenges.turnstilesolved !== undefined && (
+                            <Badge
+                              variant={result.securityChallenges.turnstilesolved ? "default" : "destructive"}
+                              className="h-5 text-[10px]"
+                            >
+                              {result.securityChallenges.turnstilesolved ? "SOLVED" : "FAILED"}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {result.securityChallenges.turnstilesolved
+                            ? `Security checkbox automatically resolved using ${result.securityChallenges.turnstileMethod || "advanced detection"}`
+                            : "Turnstile challenge detected but could not be automatically solved"}
+                        </p>
+                        {result.securityChallenges.turnstileMethod && (
+                          <div className="mt-2 flex items-center gap-1.5">
+                            <Badge
+                              variant="outline"
+                              className="bg-amber-500/10 text-amber-700 border-amber-500/30 text-[10px] font-mono"
+                            >
+                              METHOD: {result.securityChallenges.turnstileMethod}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {result && result.securityChallenges?.captchaDetected && (
+                  <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-destructive/20 text-destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                      </div>
                       <div>
-                        <p className="text-sm font-semibold text-amber-500">Cloudflare Challenge Handled</p>
+                        <p className="text-sm font-semibold text-destructive">CAPTCHA Challenge Detected</p>
                         <p className="text-xs text-muted-foreground">
-                          A security checkbox was detected and automatically resolved during login.
+                          Visual CAPTCHA (reCAPTCHA/hCaptcha) detected - cannot be bypassed automatically
                         </p>
                       </div>
                     </div>

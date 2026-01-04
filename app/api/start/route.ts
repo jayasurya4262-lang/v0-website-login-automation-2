@@ -7,6 +7,7 @@ import {
   buildCookieString,
   buildSetCookieString,
 } from "@/lib/cookie-extractor"
+import { solveTurnstileChallenge } from "@/lib/turnstile-solver"
 
 interface LoginRequest {
   targetUrl: string
@@ -88,6 +89,10 @@ export async function POST(request: NextRequest) {
         "--mute-audio",
         "--no-default-browser-check",
         "--safebrowsing-disable-auto-update",
+        "--disable-automation",
+        "--disable-blink-features=AutomationControlled",
+        "--disable-infobars",
+        "--window-size=1920,1080",
       ],
     })
 
@@ -98,9 +103,43 @@ export async function POST(request: NextRequest) {
       locale: "en-US",
       timezoneId: "America/New_York",
       ignoreHTTPSErrors: true,
+      extraHTTPHeaders: {
+        "Accept-Language": "en-US,en;q=0.9",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+      },
     })
 
     const page = await context.newPage()
+
+    await page.addInitScript(() => {
+      // Override navigator.webdriver
+      Object.defineProperty(navigator, "webdriver", {
+        get: () => false,
+      })
+
+      // Override chrome property
+      ;(window as any).chrome = {
+        runtime: {},
+      }
+
+      // Override permissions
+      const originalQuery = window.navigator.permissions.query
+      window.navigator.permissions.query = (parameters: any) =>
+        parameters.name === "notifications"
+          ? Promise.resolve({ state: Notification.permission } as PermissionStatus)
+          : originalQuery(parameters)
+
+      // Override plugins
+      Object.defineProperty(navigator, "plugins", {
+        get: () => [1, 2, 3, 4, 5],
+      })
+
+      // Override languages
+      Object.defineProperty(navigator, "languages", {
+        get: () => ["en-US", "en"],
+      })
+    })
 
     try {
       let navigationSuccess = false
@@ -110,7 +149,7 @@ export async function POST(request: NextRequest) {
         try {
           console.log(`[v0] Attempt ${attempt}: Navigating to ${loginUrl}`)
           await page.goto(loginUrl, {
-            waitUntil: "domcontentloaded", // Faster than networkidle
+            waitUntil: "domcontentloaded",
             timeout: 30000,
           })
 
@@ -145,109 +184,24 @@ export async function POST(request: NextRequest) {
       }
       await page.waitForTimeout(3000)
 
-      console.log("[v0] Checking for Cloudflare/Turnstile challenges...")
-      const cfSelectors = [
-        'iframe[src*="cloudflare"]',
-        'iframe[title*="Cloudflare"]',
-        "#cf-turnstile",
-        "#cf-challenge",
-        ".cf-turnstile",
-      ]
+      console.log("[v0] Checking for Cloudflare Turnstile challenge...")
+      const turnstileResult = await solveTurnstileChallenge(page)
 
-      for (const selector of cfSelectors) {
-        try {
-          const cfFrame = await page.$(selector)
-          if (cfFrame) {
-            console.log(`[v0] Potential Cloudflare challenge detected: ${selector}`)
-            // Attempt to find the checkbox inside the frame if it's an iframe
-            const frame = await cfFrame.contentFrame()
-            if (frame) {
-              const checkbox = await frame.$('input[type="checkbox"], #challenge-stage input')
-              if (checkbox) {
-                console.log("[v0] Clicking Cloudflare checkbox inside iframe...")
-                await checkbox.click()
-                await page.waitForTimeout(2000)
-              }
-            } else {
-              // Direct click if it's not an iframe element itself
-              await cfFrame.click().catch(() => {})
-            }
-          }
-        } catch (e) {
-          console.log(`[v0] Error checking selector ${selector}:`, e)
+      let turnstilesolved = false
+      let turnstileMethod: string | undefined = undefined
+
+      if (turnstileResult.success) {
+        console.log(`[v0] Turnstile handling: ${turnstileResult.message}`)
+        if (turnstileResult.method) {
+          console.log(`[v0] Method used: ${turnstileResult.method}`)
+          turnstileMethod = turnstileResult.method
+          turnstilesolved = true
         }
-      }
-
-      console.log("[v0] Checking for Cloudflare challenge...")
-      const cloudflareDetected = await page.evaluate(() => {
-        // Check for Cloudflare challenge indicators
-        const cfChallenge = document.querySelector('input[type="checkbox"][name="cf-turnstile-response"]')
-        const cfFrame = document.querySelector('iframe[src*="challenges.cloudflare.com"]')
-        const cfBody = document.body.textContent?.includes("Checking your browser")
-        const cfTitle = document.title.toLowerCase().includes("cloudflare")
-        return !!(cfChallenge || cfFrame || cfBody || cfTitle)
-      })
-
-      if (cloudflareDetected) {
-        console.log("[v0] Cloudflare challenge detected, attempting to handle...")
-
-        // Try to find and click Cloudflare checkbox
-        const cfCheckboxSelectors = [
-          'input[type="checkbox"][name="cf-turnstile-response"]',
-          'iframe[src*="challenges.cloudflare.com"]',
-          '#cf-stage input[type="checkbox"]',
-          '.cf-turnstile input[type="checkbox"]',
-        ]
-
-        let cfCheckboxClicked = false
-        for (const selector of cfCheckboxSelectors) {
-          try {
-            const element = await page.waitForSelector(selector, { timeout: 3000, state: "visible" })
-            if (element) {
-              console.log(`[v0] Found Cloudflare element: ${selector}`)
-
-              // If it's an iframe, click inside it
-              if (selector.includes("iframe")) {
-                const frame = page.frame({ url: /challenges\.cloudflare\.com/ })
-                if (frame) {
-                  const checkbox = await frame.$('input[type="checkbox"]')
-                  if (checkbox) {
-                    await checkbox.click()
-                    console.log("[v0] Clicked Cloudflare checkbox in iframe")
-                    cfCheckboxClicked = true
-                  }
-                }
-              } else {
-                await element.click()
-                console.log("[v0] Clicked Cloudflare checkbox")
-                cfCheckboxClicked = true
-              }
-              break
-            }
-          } catch (e) {
-            continue
-          }
-        }
-
-        if (cfCheckboxClicked) {
-          console.log("[v0] Waiting for Cloudflare challenge to resolve...")
-          // Wait for challenge to complete (up to 10 seconds)
-          for (let i = 0; i < 20; i++) {
-            await page.waitForTimeout(500)
-            const challengeResolved = await page.evaluate(() => {
-              const cfChallenge = document.querySelector('input[type="checkbox"][name="cf-turnstile-response"]')
-              const cfFrame = document.querySelector('iframe[src*="challenges.cloudflare.com"]')
-              return !cfChallenge && !cfFrame
-            })
-
-            if (challengeResolved) {
-              console.log(`[v0] Cloudflare challenge resolved after ${(i + 1) * 0.5} seconds`)
-              break
-            }
-          }
-        }
-
-        await page.waitForTimeout(2000) // Additional wait after resolution
+        // Wait a bit after solving
+        await page.waitForTimeout(2000)
+      } else {
+        console.log(`[v0] Turnstile handling failed: ${turnstileResult.message}`)
+        // Continue anyway - might not be a hard blocker
       }
 
       const usernameSelectors = [
@@ -554,8 +508,10 @@ export async function POST(request: NextRequest) {
           pageTitle: await page.title().catch(() => "Unknown"),
           extractedAt: new Date().toISOString(),
           securityChallenges: {
-            cloudflareDetected: cloudflareDetected,
+            cloudflareDetected: turnstileResult.success || !!turnstileMethod,
             captchaDetected: !!hasCaptcha,
+            turnstilesolved: turnstilesolved,
+            turnstileMethod: turnstileMethod,
           },
         },
       }
@@ -606,8 +562,10 @@ export async function POST(request: NextRequest) {
         webhookSent: webhookSuccess,
         webhookError: webhookSuccess ? undefined : webhookError,
         securityChallenges: {
-          cloudflareDetected: cloudflareDetected,
+          cloudflareDetected: turnstileResult.success || !!turnstileMethod,
           captchaDetected: !!hasCaptcha,
+          turnstilesolved: turnstilesolved,
+          turnstileMethod: turnstileMethod,
         },
         extraction: {
           totalCookies: allCookies.length,
